@@ -107,7 +107,6 @@ func New(configName string) (*Config, error) {
 				return nil, fmt.Errorf("bad bwlimit value '%s' : %s", value, err)
 			}
 			conf.Bwlimit = bwlimit
-
 		case "ca":
 			conf.Ca = value
 		case "cert":
@@ -244,14 +243,10 @@ func tlsConfig(conf *Config) error {
 	tlsConfig.ClientCAs = certPool
 	tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	//Use only modern ciphers
-	tlsConfig.CipherSuites = []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+	tlsConfig.CipherSuites = []uint16{
 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256}
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	}
 	//Use only TLS v1.2
 	tlsConfig.MinVersion = tls.VersionTLS12
 	//Don't allow session resumption

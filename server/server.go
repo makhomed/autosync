@@ -2,11 +2,14 @@ package server
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"config"
 	"strconv"
 	"log"
+	"encoding/gob"
+	"protocol"
+	"zfs"
+	"io"
 )
 
 func Server(conf *config.Config) {
@@ -20,15 +23,33 @@ func Server(conf *config.Config) {
 		if err != nil {
 			log.Printf("listener.Accept() failed: %s", err)
 		}
-		go handleClient(conn)
+		go handleClient(conf, conn)
 	}
 }
 
-func handleClient(conn net.Conn) {
-	_, err := fmt.Fprintf(conn, "Hello TLS\n")
-	if err != nil {
-		fmt.Printf("Error on connection:%v", err)
+func handleClient(conf *config.Config, conn net.Conn) {
+
+	enc := gob.NewEncoder(conn) // Will write to network.
+	dec := gob.NewDecoder(conn) // Will read from network.
+
+	interaction: for {
+		var request protocol.Request
+		err := dec.Decode(&request)
+		if err != nil {
+			if err != io.EOF {
+				log.Println("decode error:", err)
+			}
+			break interaction
+		}
+		switch request.RequestType {
+		case protocol.RequestDatasets:
+			response := zfs.GetResponseDatasets(conf)
+			err = enc.Encode(&response)
+			if err != nil {
+				log.Println("encode error:", err)
+				break interaction
+			}
+		}
 	}
 	conn.Close()
-
 }
