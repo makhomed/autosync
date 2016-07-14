@@ -19,7 +19,7 @@ type Config struct {
 	Listen    string
 	Remote    string
 	Port      int
-	Bwlimit   int
+	Bwlimit   int64
 
 	Log       string
 
@@ -102,7 +102,7 @@ func New(configName string) (*Config, error) {
 			}
 			conf.Port = port
 		case "bwlimit":
-			bwlimit, err := strconv.Atoi(value)
+			bwlimit, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("bad bwlimit value '%s' : %s", value, err)
 			}

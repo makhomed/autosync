@@ -10,6 +10,7 @@ import (
 	"protocol"
 	"zfs"
 	"io"
+	"github.com/mxk/go-flowrate/flowrate"
 )
 
 func Server(conf *config.Config) {
@@ -29,8 +30,8 @@ func Server(conf *config.Config) {
 
 func handleClient(conf *config.Config, conn net.Conn) {
 
-	enc := gob.NewEncoder(conn) // Will write to network.
-	dec := gob.NewDecoder(conn) // Will read from network.
+	enc := gob.NewEncoder(flowrate.NewWriter(conn, conf.Bwlimit * 1024)) // Will write to network.
+	dec := gob.NewDecoder(flowrate.NewReader(conn, conf.Bwlimit * 1024)) // Will read from network.
 
 	interaction: for {
 		var request protocol.Request

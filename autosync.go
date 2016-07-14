@@ -12,6 +12,7 @@ import (
 )
 
 //go:generate go get gopkg.in/natefinch/lumberjack.v2
+//go:generate go get github.com/mxk/go-flowrate
 
 var configName = flag.String("c", "/opt/autosync/conf/autosync.conf", "config")
 

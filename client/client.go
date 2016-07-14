@@ -10,6 +10,7 @@ import (
 	"log"
 	"encoding/gob"
 	"protocol"
+	"github.com/mxk/go-flowrate/flowrate"
 )
 
 func Client(conf *config.Config) {
@@ -27,8 +28,8 @@ func session(conf *config.Config) {
 	}
 	defer conn.Close()
 
-	enc := gob.NewEncoder(conn) // Will write to network.
-	dec := gob.NewDecoder(conn) // Will read from network.
+	enc := gob.NewEncoder(flowrate.NewWriter(conn, conf.Bwlimit * 1024)) // Will write to network.
+	dec := gob.NewDecoder(flowrate.NewReader(conn, conf.Bwlimit * 1024)) // Will read from network.
 
 	request := new(protocol.Request)
 	request.RequestType = protocol.RequestDatasets
