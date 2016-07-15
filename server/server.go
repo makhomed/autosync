@@ -29,18 +29,19 @@ func Server(conf *config.Config) {
 }
 
 func handleClient(conf *config.Config, conn net.Conn) {
+	defer conn.Close()
 
 	enc := gob.NewEncoder(flowrate.NewWriter(conn, conf.Bwlimit * 1024)) // Will write to network.
 	dec := gob.NewDecoder(flowrate.NewReader(conn, conf.Bwlimit * 1024)) // Will read from network.
 
-	interaction: for {
+	for {
 		var request protocol.Request
 		err := dec.Decode(&request)
 		if err != nil {
 			if err != io.EOF {
 				log.Println("decode error:", err)
 			}
-			break interaction
+			return
 		}
 		switch request.RequestType {
 		case protocol.RequestDatasets:
@@ -48,9 +49,16 @@ func handleClient(conf *config.Config, conn net.Conn) {
 			err = enc.Encode(&response)
 			if err != nil {
 				log.Println("encode error:", err)
-				break interaction
+				return
+			}
+		case protocol.RequestSnapshots:
+			dataset := request.DatasetName
+			response := zfs.GetResponseSnapshots(conf, dataset)
+			err = enc.Encode(&response)
+			if err != nil {
+				log.Println("encode error:", err)
+				return
 			}
 		}
 	}
-	conn.Close()
 }

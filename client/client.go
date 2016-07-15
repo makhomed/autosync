@@ -11,6 +11,7 @@ import (
 	"encoding/gob"
 	"protocol"
 	"github.com/mxk/go-flowrate/flowrate"
+	"util"
 )
 
 func Client(conf *config.Config) {
@@ -46,14 +47,48 @@ func session(conf *config.Config) {
 	}
 	switch response.ResponseType {
 	case protocol.ResponseDatasets:
-		for _, dataset := range response.Datasets {
-			fmt.Println(dataset)
-		}
-		fmt.Println("")
+		processDatasetsResponse(conf, enc, dec, &response)
 	case protocol.ResponseError:
 		log.Println("remote error:", response.Error)
 		return
 	default:
 		panic(fmt.Sprintf("unexpected response type '%d'", response.ResponseType))
 	}
+}
+
+func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {
+	datasets := util.FilterDatasets(conf, response.Datasets)
+	for _, dataset := range datasets {
+		request := new(protocol.Request)
+		request.RequestType = protocol.RequestSnapshots
+		request.DatasetName = dataset
+		err := enc.Encode(&request)
+		if err != nil {
+			log.Println("snapshots encode error:", err)
+			continue
+		}
+		var response protocol.Response
+		err = dec.Decode(&response)
+		if err != nil {
+			log.Println("snapshots decode error:", err)
+			continue
+		}
+		switch response.ResponseType {
+		case protocol.ResponseSnapshots:
+			processSnapshotsResponse(conf, enc, dec, &response)
+		case protocol.ResponseError:
+			log.Println("snapshots remote error:", response.Error)
+			continue
+		default:
+			panic(fmt.Sprintf("unexpected response type '%d'", response.ResponseType))
+		}
+	}
+}
+
+func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {
+	snapshots := response.Snapshots
+	for _, snapshot := range snapshots {
+		fmt.Println(snapshot)
+	}
+	fmt.Println("")
 }
