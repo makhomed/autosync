@@ -17,12 +17,13 @@ func Server(conf *config.Config) {
 
 	listener, err := tls.Listen("tcp", net.JoinHostPort(conf.Listen, strconv.Itoa(conf.Port)), conf.TlsConfig)
 	if err != nil {
-		log.Printf("tls.Listen() failed: %s", err)
+		log.Fatalf("tls.Listen() failed: %s", err)
 	}
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("listener.Accept() failed: %s", err)
+			continue
 		}
 		go handleClient(conf, conn)
 	}
@@ -59,6 +60,9 @@ func handleClient(conf *config.Config, conn net.Conn) {
 				log.Println("encode error:", err)
 				return
 			}
+		default:
+			log.Println("unknown request type '%d'", request.RequestType)
+			return
 		}
 	}
 }

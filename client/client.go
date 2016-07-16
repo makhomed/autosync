@@ -52,7 +52,8 @@ func session(conf *config.Config) {
 		log.Println("remote error:", response.Error)
 		return
 	default:
-		panic(fmt.Sprintf("unexpected response type '%d'", response.ResponseType))
+		log.Println("unexpected response type '%d'", response.ResponseType)
+		return
 	}
 }
 
