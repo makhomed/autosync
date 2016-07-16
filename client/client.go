@@ -47,13 +47,21 @@ func session(conf *config.Config) {
 	}
 	switch response.ResponseType {
 	case protocol.ResponseDatasets:
-		processDatasetsResponse(conf, enc, dec, &response)
+		processDatasetsResponse1(conf, enc, dec, &response)
 	case protocol.ResponseError:
 		log.Println("remote error:", response.Error)
 		return
 	default:
 		panic(fmt.Sprintf("unexpected response type '%d'", response.ResponseType))
 	}
+}
+
+func processDatasetsResponse1(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {
+	datasets := util.FilterDatasets(conf, response.Datasets)
+	for _, dataset := range datasets {
+		fmt.Println(dataset)
+	}
+	fmt.Println("")
 }
 
 func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {

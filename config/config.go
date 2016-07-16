@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"io/ioutil"
 	"time"
+	"regexp"
 )
 
 type Config struct {
@@ -44,6 +45,14 @@ func (config *Config) Included(dataset string) bool {
 	for _, line := range config.filter {
 		if line.pattern == "*" {
 			return line.included
+		}
+		if strings.Contains(line.pattern, "**") {
+			pattern := strings.Replace(line.pattern, "**", ".*", -1)
+			re := regexp.MustCompile(pattern)
+			matched := re.MatchString(dataset)
+			if matched {
+				return line.included
+			}
 		}
 		matched, err := filepath.Match(line.pattern, dataset);
 		if err != nil {
@@ -188,9 +197,6 @@ func verifyConfig(conf *Config) error {
 		if conf.Delay <= 0 {
 			return fmt.Errorf("bad delay directive value '%s'", conf.Delay)
 		}
-		if _, err := os.Stat(conf.Storage); os.IsNotExist(err) {
-			return fmt.Errorf("bad 'storage' value '%s' : %s", conf.Storage, err)
-		}
 	default:
 		return fmt.Errorf("unknown mode directive value '%s', must be 'server' or 'client'", conf.Mode)
 	}
@@ -215,6 +221,16 @@ func verifyConfig(conf *Config) error {
 		return fmt.Errorf("bad 'delay' value '%s'", conf.Delay)
 	}
 
+	for _, line := range conf.filter {
+		if strings.Contains(line.pattern, "**") {
+			pattern := strings.Replace(line.pattern, "**", ".*", -1)
+			_, err := regexp.Compile(pattern)
+			if err != nil {
+				return err
+			}
+
+		}
+	}
 	return nil
 }
 
