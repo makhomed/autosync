@@ -32,7 +32,7 @@ func session(conf *config.Config) {
 	enc := gob.NewEncoder(flowrate.NewWriter(conn, conf.Bwlimit * 1024)) // Will write to network.
 	dec := gob.NewDecoder(flowrate.NewReader(conn, conf.Bwlimit * 1024)) // Will read from network.
 
-	request := new(protocol.Request)
+	var request protocol.Request
 	request.RequestType = protocol.RequestDatasets
 	err = enc.Encode(&request)
 	if err != nil {
@@ -47,7 +47,7 @@ func session(conf *config.Config) {
 	}
 	switch response.ResponseType {
 	case protocol.ResponseDatasets:
-		processDatasetsResponse1(conf, enc, dec, &response)
+		processDatasetsResponse(conf, enc, dec, &response)
 	case protocol.ResponseError:
 		log.Println("remote error:", response.Error)
 		return
@@ -57,18 +57,10 @@ func session(conf *config.Config) {
 	}
 }
 
-func processDatasetsResponse1(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {
-	datasets := util.FilterDatasets(conf, response.Datasets)
-	for _, dataset := range datasets {
-		fmt.Println(dataset)
-	}
-	fmt.Println("")
-}
-
 func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {
 	datasets := util.FilterDatasets(conf, response.Datasets)
 	for _, dataset := range datasets {
-		request := new(protocol.Request)
+		var request protocol.Request
 		request.RequestType = protocol.RequestSnapshots
 		request.DatasetName = dataset
 		err := enc.Encode(&request)
@@ -84,17 +76,18 @@ func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Dec
 		}
 		switch response.ResponseType {
 		case protocol.ResponseSnapshots:
-			processSnapshotsResponse(conf, enc, dec, &response)
+			processSnapshotsResponse(conf, enc, dec, &response, dataset)
 		case protocol.ResponseError:
 			log.Println("snapshots remote error:", response.Error)
 			continue
 		default:
-			panic(fmt.Sprintf("unexpected response type '%d'", response.ResponseType))
+			log.Printf("unexpected response type '%d'", response.ResponseType)
+			continue
 		}
 	}
 }
 
-func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {
+func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response, dataset string) {
 	snapshots := response.Snapshots
 	for _, snapshot := range snapshots {
 		fmt.Println(snapshot)
