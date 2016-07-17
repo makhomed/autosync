@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"crypto/tls"
 	"config"
 	"net"
@@ -13,6 +12,9 @@ import (
 	"github.com/mxk/go-flowrate/flowrate"
 	"util"
 	"zfs"
+	"os/exec"
+	"bytes"
+	"io"
 )
 
 func Client(conf *config.Config) {
@@ -48,7 +50,7 @@ func session(conf *config.Config) {
 	}
 	switch response.ResponseType {
 	case protocol.ResponseDatasets:
-		processDatasetsResponse(conf, enc, dec, &response)
+		processDatasetsResponse(conf, &response)
 	case protocol.ResponseError:
 		log.Println("remote error:", response.Error)
 		return
@@ -58,7 +60,17 @@ func session(conf *config.Config) {
 	}
 }
 
-func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response) {
+func processDatasetsResponse(conf *config.Config, response *protocol.Response) {
+	conn, err := tls.Dial("tcp", net.JoinHostPort(conf.Remote, strconv.Itoa(conf.Port)), conf.TlsConfig)
+	if err != nil {
+		log.Printf("tls.Dial() failed: %s", err)
+		return
+	}
+	defer conn.Close()
+
+	enc := gob.NewEncoder(flowrate.NewWriter(conn, conf.Bwlimit * 1024)) // Will write to network.
+	dec := gob.NewDecoder(flowrate.NewReader(conn, conf.Bwlimit * 1024)) // Will read from network.
+
 	datasets := util.FilterDatasets(conf, response.Datasets)
 	for _, dataset := range datasets {
 		var request protocol.Request
@@ -77,7 +89,7 @@ func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Dec
 		}
 		switch response.ResponseType {
 		case protocol.ResponseSnapshots:
-			processSnapshotsResponse(conf, enc, dec, &response, dataset)
+			processSnapshotsResponse(conf, &response, dataset)
 		case protocol.ResponseError:
 			log.Println("snapshots remote error:", response.Error)
 			continue
@@ -88,7 +100,7 @@ func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Dec
 	}
 }
 
-func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response, sourceDataset string) {
+func processSnapshotsResponse(conf *config.Config, response *protocol.Response, sourceDataset string) {
 	sourceSnapshots := response.Snapshots
 	if len(sourceSnapshots) == 0 {
 		log.Printf("source snapshots list empty, can't replicate %s", sourceDataset)
@@ -103,7 +115,7 @@ func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.De
 	if _, ok := destinationDatasets[destinationDataset]; !ok {
 		// destination dataset not exists, process full zfs send
 		sourceSnapshot := util.SourceSnapshotForFullZfsSend(sourceSnapshots)
-		processFullZfsSend(conf, enc, dec, sourceDataset, sourceSnapshot)
+		processFullZfsSend(conf, sourceDataset, sourceSnapshot)
 		return
 	}
 	destinationSnapshots, err := zfs.GetSnapshots(destinationDataset)
@@ -115,33 +127,164 @@ func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.De
 	if len(intersection) == 0 {
 		// no intersection, process full zfs send
 		sourceSnapshot := util.SourceSnapshotForFullZfsSend(sourceSnapshots)
-		processFullZfsSend(conf, enc, dec, sourceDataset, sourceSnapshot)
+		processFullZfsSend(conf, sourceDataset, sourceSnapshot)
 		return
 	} else {
 		// intersection, process incremental zfs send
 		snapshot1 := intersection[len(intersection) - 1]
 		snapshot2 := sourceSnapshots[len(sourceSnapshots) - 1]
 		if snapshot1 != snapshot2 {
-			processIncrementalZfsSend(conf, enc, dec, sourceDataset, snapshot1, snapshot2)
+			processIncrementalZfsSend(conf, sourceDataset, snapshot1, snapshot2)
+			return
 		}
 	}
+}
 
-	/*
-	fmt.Println("")
-	fmt.Println(sourceDataset, destinationDataset)
-	for _, sourceSnapshot := range sourceSnapshots {
-		fmt.Println(sourceSnapshot)
+func processFullZfsSend(conf *config.Config, sourceDataset string, snapshot1 string) {
+	// destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
+	// fmt.Println("full", sourceDataset, destinationDataset, snapshot1)
+	conn, err := tls.Dial("tcp", net.JoinHostPort(conf.Remote, strconv.Itoa(conf.Port)), conf.TlsConfig)
+	if err != nil {
+		log.Printf("tls.Dial() failed: %s", err)
+		return
 	}
-	fmt.Println(destinationSnapshots)
-	*/
+	defer conn.Close()
+
+	enc := gob.NewEncoder(flowrate.NewWriter(conn, conf.Bwlimit * 1024)) // Will write to network.
+	dec := gob.NewDecoder(flowrate.NewReader(conn, conf.Bwlimit * 1024)) // Will read from network.
+
+	var request protocol.Request
+	request.RequestType = protocol.RequestFullSnapshot
+	request.DatasetName = sourceDataset
+	request.Snapshot1Name = snapshot1
+	err = enc.Encode(&request)
+	if err != nil {
+		log.Println("encode error:", err)
+		return
+	}
+
+	//zfs recv -F -d tank/backup
+	cmd := exec.Command("zfs", "recv", "-F", "-d", conf.Storage)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		log.Println("can't run zfs recv command:", err)
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		log.Println("can't run zfs recv command:", err)
+		return
+	}
+	defer stdin.Close()
+
+	var response protocol.Response
+	for {
+		err = dec.Decode(&response)
+		if err != nil {
+			log.Println("decode error:", err)
+			return
+		}
+		switch response.ResponseType {
+		case protocol.ResponseZfsStream:
+			data := response.DataChunk
+			_, err := stdin.Write(data)
+			if err != nil {
+				log.Println("zfs recv write error:", err)
+			}
+		case protocol.ResponseDataEOF:
+			stdin.Close()
+			if err := cmd.Wait(); err != nil {
+				log.Println("zfs recv failed", err)
+				exitError, ok := err.(*exec.ExitError)
+				if ok {
+					log.Println("stderr:", string(exitError.Stderr))
+				}
+			}
+			return
+		case protocol.ResponseError:
+			log.Println("remote error:", response.Error)
+			return
+		default:
+			log.Println("unexpected response type '%d'", response.ResponseType)
+			return
+		}
+	}
 }
 
-func processFullZfsSend(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, sourceDataset string, snapshot string) {
-	destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
-	fmt.Println("full", sourceDataset, destinationDataset, snapshot)
-}
+func processIncrementalZfsSend(conf *config.Config, sourceDataset string, snapshot1 string, snapshot2 string) {
+	//destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
+	//fmt.Println("incr", sourceDataset, destinationDataset, snapshot1, snapshot2)
+	conn, err := tls.Dial("tcp", net.JoinHostPort(conf.Remote, strconv.Itoa(conf.Port)), conf.TlsConfig)
+	if err != nil {
+		log.Printf("tls.Dial() failed: %s", err)
+		return
+	}
+	defer conn.Close()
 
-func processIncrementalZfsSend(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, sourceDataset string, snapshot1 string, snapshot2 string) {
-	destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
-	fmt.Println("incr", sourceDataset, destinationDataset, snapshot1, snapshot2)
+	enc := gob.NewEncoder(flowrate.NewWriter(conn, conf.Bwlimit * 1024)) // Will write to network.
+	dec := gob.NewDecoder(flowrate.NewReader(conn, conf.Bwlimit * 1024)) // Will read from network.
+
+	var request protocol.Request
+	request.RequestType = protocol.RequestIncrementalSnapshot
+	request.DatasetName = sourceDataset
+	request.Snapshot1Name = snapshot1
+	request.Snapshot2Name = snapshot2
+	err = enc.Encode(&request)
+	if err != nil {
+		log.Println("encode error:", err)
+		return
+	}
+
+	//zfs recv -F -d tank/backup
+	cmd := exec.Command("zfs", "recv", "-F", "-d", conf.Storage)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		log.Println("can't run zfs recv command:", err)
+		return
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Println("can't run zfs recv command:", err)
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		log.Println("can't run zfs recv command:", err)
+		return
+	}
+	defer stdin.Close()
+
+	var response protocol.Response
+	for {
+		err = dec.Decode(&response)
+		if err != nil {
+			log.Println("decode error:", err)
+			return
+		}
+		switch response.ResponseType {
+		case protocol.ResponseZfsStream:
+			data := response.DataChunk
+			_, err := stdin.Write(data)
+			if err != nil {
+				log.Println("zfs recv write error:", err)
+			}
+		case protocol.ResponseDataEOF:
+			stdin.Close()
+			if err := cmd.Wait(); err != nil {
+				log.Println("zfs recv failed", err)
+				exitError, ok := err.(*exec.ExitError)
+				if ok {
+					log.Println("stderr:", string(exitError.Stderr))
+				}
+				var b bytes.Buffer
+				io.Copy(&b, stdout)
+				log.Println("stdout:", b.String())
+			}
+			return
+		case protocol.ResponseError:
+			log.Println("remote error:", response.Error)
+			return
+		default:
+			log.Println("unexpected response type '%d'", response.ResponseType)
+			return
+		}
+	}
 }

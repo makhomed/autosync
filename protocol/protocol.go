@@ -24,11 +24,10 @@ const (
 	ResponseSnapshots = 4
 
 	RequestFullSnapshot = 5
-	ResponseFullSnapshot = 6
-
 	RequestIncrementalSnapshot = 7
-	ResponseIncrementalSnapshot = 8
+	ResponseZfsStream = 9
 
+	ResponseDataEOF = 254
 	ResponseError = 255
 )
 
