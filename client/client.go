@@ -91,7 +91,7 @@ func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Dec
 func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response, sourceDataset string) {
 	sourceSnapshots := response.Snapshots
 	if len(sourceSnapshots) == 0 {
-		log.Println("source snapshots list empty, can't replicate")
+		log.Printf("source snapshots list empty, can't replicate %s", sourceDataset)
 		return
 	}
 	destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
@@ -102,6 +102,9 @@ func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.De
 	}
 	if _, ok := destinationDatasets[destinationDataset]; !ok {
 		// destination dataset not exists, process full zfs send
+		sourceSnapshot := util.SourceSnapshotForFullZfsSend(sourceSnapshots)
+		processFullZfsSend(conf, enc, dec, sourceDataset, sourceSnapshot)
+		return
 	}
 	destinationSnapshots, err := zfs.GetSnapshots(destinationDataset)
 	if err != nil {
@@ -111,15 +114,34 @@ func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.De
 	intersection := util.IntersectionOfSnapshots(sourceSnapshots, destinationSnapshots)
 	if len(intersection) == 0 {
 		// no intersection, process full zfs send
+		sourceSnapshot := util.SourceSnapshotForFullZfsSend(sourceSnapshots)
+		processFullZfsSend(conf, enc, dec, sourceDataset, sourceSnapshot)
+		return
 	} else {
 		// intersection, process incremental zfs send
+		snapshot1 := intersection[len(intersection) - 1]
+		snapshot2 := sourceSnapshots[len(sourceSnapshots) - 1]
+		if snapshot1 != snapshot2 {
+			processIncrementalZfsSend(conf, enc, dec, sourceDataset, snapshot1, snapshot2)
+		}
 	}
 
+	/*
 	fmt.Println("")
 	fmt.Println(sourceDataset, destinationDataset)
 	for _, sourceSnapshot := range sourceSnapshots {
 		fmt.Println(sourceSnapshot)
 	}
 	fmt.Println(destinationSnapshots)
+	*/
 }
 
+func processFullZfsSend(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, sourceDataset string, snapshot string) {
+	destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
+	fmt.Println("full", sourceDataset, destinationDataset, snapshot)
+}
+
+func processIncrementalZfsSend(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, sourceDataset string, snapshot1 string, snapshot2 string) {
+	destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
+	fmt.Println("incr", sourceDataset, destinationDataset, snapshot1, snapshot2)
+}

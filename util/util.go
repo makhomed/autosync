@@ -36,3 +36,25 @@ func IntersectionOfSnapshots(sourceSnapshots []string, destinationSnapshots map[
 	}
 	return result
 }
+
+func Suffix(snapshot string) string {
+	pos := strings.LastIndex(snapshot, ".")
+	if pos == -1 {
+		panic(fmt.Sprintf("unexpected snapshot name: '%s'", snapshot))
+	}
+	return snapshot[pos+1:]
+}
+
+func SourceSnapshotForFullZfsSend(sourceSnapshots []string) string {
+	sort.Strings(sourceSnapshots)
+	result := sourceSnapshots[0]
+	suffix := Suffix(result)
+	for _, line := range sourceSnapshots {
+		if Suffix(line) == suffix {
+			result = line
+		}
+	}
+	return result
+}
+
+
