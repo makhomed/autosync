@@ -3,6 +3,9 @@ package util
 import (
 	"config"
 	"sort"
+	"strings"
+	"fmt"
+	"path"
 )
 
 func FilterDatasets(conf *config.Config, datasets []string) []string {
@@ -13,5 +16,23 @@ func FilterDatasets(conf *config.Config, datasets []string) []string {
 		}
 	}
 	sort.Strings(result)
+	return result
+}
+
+func DestinationDataset(storage string, sourceDataset string) string {
+	pos := strings.Index(sourceDataset, "/")
+	if pos == -1 {
+		panic(fmt.Sprintf("unexpected dataset name: '%s'", sourceDataset))
+	}
+	return path.Join(storage, sourceDataset[pos+1:])
+}
+
+func IntersectionOfSnapshots(sourceSnapshots []string, destinationSnapshots map[string]bool) []string {
+	result := make([]string, 0)
+	for _, sourceSnapshot := range sourceSnapshots {
+		if _, ok := destinationSnapshots[sourceSnapshot]; ok {
+			result = append(result, sourceSnapshot)
+		}
+	}
 	return result
 }

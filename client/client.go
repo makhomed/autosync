@@ -12,6 +12,7 @@ import (
 	"protocol"
 	"github.com/mxk/go-flowrate/flowrate"
 	"util"
+	"zfs"
 )
 
 func Client(conf *config.Config) {
@@ -87,10 +88,38 @@ func processDatasetsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Dec
 	}
 }
 
-func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response, dataset string) {
-	snapshots := response.Snapshots
-	for _, snapshot := range snapshots {
-		fmt.Println(snapshot)
+func processSnapshotsResponse(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, response *protocol.Response, sourceDataset string) {
+	sourceSnapshots := response.Snapshots
+	if len(sourceSnapshots) == 0 {
+		log.Println("source snapshots list empty, can't replicate")
+		return
 	}
+	destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
+	destinationDatasets, err := zfs.GetDestinationDatasets(conf.Storage)
+	if err != nil {
+		log.Println("can't get list of destination datasets", err)
+		return
+	}
+	if _, ok := destinationDatasets[destinationDataset]; !ok {
+		// destination dataset not exists, process full zfs send
+	}
+	destinationSnapshots, err := zfs.GetSnapshots(destinationDataset)
+	if err != nil {
+		log.Println("can't get list of destination snapshots", err)
+		return
+	}
+	intersection := util.IntersectionOfSnapshots(sourceSnapshots, destinationSnapshots)
+	if len(intersection) == 0 {
+		// no intersection, process full zfs send
+	} else {
+		// intersection, process incremental zfs send
+	}
+
 	fmt.Println("")
+	fmt.Println(sourceDataset, destinationDataset)
+	for _, sourceSnapshot := range sourceSnapshots {
+		fmt.Println(sourceSnapshot)
+	}
+	fmt.Println(destinationSnapshots)
 }
+
