@@ -1,0 +1,11 @@
+[Unit]
+Description=autosync-client
+After=network-online.target
+
+[Service]
+ExecStart=/opt/autosync/bin/autosync -c /opt/autosync/conf/client.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+

@@ -81,7 +81,7 @@ func processRequestFullSnapshot(conf *config.Config, enc *gob.Encoder, dec *gob.
 	fullSnapshotName := dataset + "@" + snapshot
 
 	//zfs send tank/101@autosnap.2016-07-16.17:24:14.daily
-	cmd := exec.Command("zfs", "send", fullSnapshotName)
+	cmd := exec.Command("zfs", "send", "-p", fullSnapshotName)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Println("can't run zfs send command:", err)
@@ -141,7 +141,7 @@ func processRequestIncrementalSnapshot(conf *config.Config, enc *gob.Encoder, de
 	fullSnapshot2Name := dataset + "@" + snapshot2
 
 	//zfs send tank/101@autosnap.2016-07-16.17:24:14.daily
-	cmd := exec.Command("zfs", "send", "-I", fullSnapshot1Name, fullSnapshot2Name)
+	cmd := exec.Command("zfs", "send", "-p", "-I", fullSnapshot1Name, fullSnapshot2Name)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Println("can't run zfs send command:", err)
