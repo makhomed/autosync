@@ -8,6 +8,7 @@ import (
 	"config"
 	"protocol"
 	"sort"
+	"log"
 )
 
 func getAllDatasets() (map[string]bool, error) {
@@ -98,7 +99,7 @@ func GetSnapshots(forDataset string) (map[string]bool, error) {
 	return snapshots, nil
 }
 
-func GetResponseSnapshots(conf *config.Config, forDataset string) protocol.Response {
+func GetResponseSnapshots(forDataset string) protocol.Response {
 	response := protocol.Response{}
 	snapshots, err := GetSnapshots(forDataset)
 	if err != nil {
@@ -118,3 +119,20 @@ func GetResponseSnapshots(conf *config.Config, forDataset string) protocol.Respo
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+func Destroy(name string) {
+	cmd := exec.Command("zfs", "destroy", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("zfs.destroy: zfs destroy %s\n", name)
+		log.Printf("zfs.destroy: %v\n", err)
+	}
+	buffer := bytes.NewBuffer(output)
+	scanner := bufio.NewScanner(buffer)
+	for scanner.Scan() {
+		line := scanner.Text()
+		log.Printf("zfs.destroy: %s\n", line)
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("zfs.destroy: %v\n", err)
+	}
+}

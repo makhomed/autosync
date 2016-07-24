@@ -55,19 +55,19 @@ func handleClient(conf *config.Config, conn net.Conn) {
 			}
 		case protocol.RequestSnapshots:
 			dataset := request.DatasetName
-			response := zfs.GetResponseSnapshots(conf, dataset)
+			response := zfs.GetResponseSnapshots(dataset)
 			err = enc.Encode(&response)
 			if err != nil {
 				log.Println("encode error:", err)
 				return
 			}
 		case protocol.RequestFullSnapshot:
-			processRequestFullSnapshot(conf, enc, dec, request)
+			processRequestFullSnapshot(enc, request)
 
 		case protocol.RequestIncrementalSnapshot:
-			processRequestIncrementalSnapshot(conf, enc, dec, request)
+			processRequestIncrementalSnapshot(enc, request)
 		default:
-			log.Println("unknown request type '%d'", request.RequestType)
+			log.Println("unknown request type:", request.RequestType)
 			return
 		}
 	}
@@ -75,7 +75,7 @@ func handleClient(conf *config.Config, conn net.Conn) {
 
 const BufferLen = 2 * 1024 * 1024 // 2 MiB
 
-func processRequestFullSnapshot(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, request protocol.Request) {
+func processRequestFullSnapshot(enc *gob.Encoder, request protocol.Request) {
 	dataset := request.DatasetName
 	snapshot := request.Snapshot1Name
 	fullSnapshotName := dataset + "@" + snapshot
@@ -133,7 +133,7 @@ func processRequestFullSnapshot(conf *config.Config, enc *gob.Encoder, dec *gob.
 	}
 }
 
-func processRequestIncrementalSnapshot(conf *config.Config, enc *gob.Encoder, dec *gob.Decoder, request protocol.Request) {
+func processRequestIncrementalSnapshot(enc *gob.Encoder, request protocol.Request) {
 	dataset := request.DatasetName
 	snapshot1 := request.Snapshot1Name
 	snapshot2 := request.Snapshot2Name

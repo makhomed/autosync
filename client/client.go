@@ -13,8 +13,7 @@ import (
 	"util"
 	"zfs"
 	"os/exec"
-	"bytes"
-	"io"
+	"bufio"
 )
 
 func Client(conf *config.Config) {
@@ -55,7 +54,7 @@ func session(conf *config.Config) {
 		log.Println("remote error:", response.Error)
 		return
 	default:
-		log.Println("unexpected response type '%d'", response.ResponseType)
+		log.Println("unexpected response type:", response.ResponseType)
 		return
 	}
 }
@@ -94,7 +93,7 @@ func processDatasetsResponse(conf *config.Config, response *protocol.Response) {
 			log.Println("snapshots remote error:", response.Error)
 			continue
 		default:
-			log.Printf("unexpected response type '%d'", response.ResponseType)
+			log.Println("unexpected response type:", response.ResponseType)
 			continue
 		}
 	}
@@ -141,6 +140,17 @@ func processSnapshotsResponse(conf *config.Config, response *protocol.Response, 
 }
 
 func processFullZfsSend(conf *config.Config, sourceDataset string, snapshot1 string) {
+
+	destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
+	destinationSnapshots, err := zfs.GetSnapshots(destinationDataset)
+	if err != nil {
+		log.Println("can't get list of destination snapshots", err)
+		return
+	}
+	for destinationSnapshot := range destinationSnapshots {
+		zfs.Destroy( destinationDataset + "@" + destinationSnapshot)
+	}
+
 	// destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
 	// fmt.Println("full", sourceDataset, destinationDataset, snapshot1)
 	conn, err := tls.Dial("tcp", net.JoinHostPort(conf.Remote, strconv.Itoa(conf.Port)), conf.TlsConfig)
@@ -170,6 +180,11 @@ func processFullZfsSend(conf *config.Config, sourceDataset string, snapshot1 str
 		log.Println("can't run zfs recv command:", err)
 		return
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Println("can't run zfs recv command:", err)
+		return
+	}
 	if err := cmd.Start(); err != nil {
 		log.Println("can't run zfs recv command:", err)
 		return
@@ -192,19 +207,20 @@ func processFullZfsSend(conf *config.Config, sourceDataset string, snapshot1 str
 			}
 		case protocol.ResponseDataEOF:
 			stdin.Close()
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				log.Println("stderr:", line)
+			}
 			if err := cmd.Wait(); err != nil {
 				log.Println("zfs recv failed", err)
-				exitError, ok := err.(*exec.ExitError)
-				if ok {
-					log.Println("stderr:", string(exitError.Stderr))
-				}
 			}
 			return
 		case protocol.ResponseError:
 			log.Println("remote error:", response.Error)
 			return
 		default:
-			log.Println("unexpected response type '%d'", response.ResponseType)
+			log.Println("unexpected response type:", response.ResponseType)
 			return
 		}
 	}
@@ -241,7 +257,7 @@ func processIncrementalZfsSend(conf *config.Config, sourceDataset string, snapsh
 		log.Println("can't run zfs recv command:", err)
 		return
 	}
-	stdout, err := cmd.StdoutPipe()
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		log.Println("can't run zfs recv command:", err)
 		return
@@ -268,22 +284,20 @@ func processIncrementalZfsSend(conf *config.Config, sourceDataset string, snapsh
 			}
 		case protocol.ResponseDataEOF:
 			stdin.Close()
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				log.Println("stderr:", line)
+			}
 			if err := cmd.Wait(); err != nil {
 				log.Println("zfs recv failed", err)
-				exitError, ok := err.(*exec.ExitError)
-				if ok {
-					log.Println("stderr:", string(exitError.Stderr))
-				}
-				var b bytes.Buffer
-				io.Copy(&b, stdout)
-				log.Println("stdout:", b.String())
 			}
 			return
 		case protocol.ResponseError:
 			log.Println("remote error:", response.Error)
 			return
 		default:
-			log.Println("unexpected response type '%d'", response.ResponseType)
+			log.Println("unexpected response type:", response.ResponseType)
 			return
 		}
 	}
