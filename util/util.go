@@ -6,6 +6,7 @@ import (
 	"strings"
 	"fmt"
 	"path"
+	"os"
 )
 
 func FilterDatasets(conf *config.Config, datasets []string) []string {
@@ -57,4 +58,9 @@ func SourceSnapshotForFullZfsSend(sourceSnapshots []string) string {
 	return result
 }
 
-
+func Verbose() bool {
+	if _, err := os.Stat("/opt/autosync/log/v"); os.IsNotExist(err) {
+		return false
+	}
+	return true
+}

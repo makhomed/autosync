@@ -18,8 +18,24 @@ import (
 
 func Client(conf *config.Config) {
 	for {
+		if util.Verbose() {
+			log.Println("Sync started...")
+		}
+		t0 := time.Now()
 		session(conf)
+		t1 := time.Now()
+		if util.Verbose() {
+			log.Printf("Sync finished, duration %v", t1.Sub(t0))
+		}
+		if util.Verbose() {
+			log.Println("Delay started...")
+		}
+		d0 := time.Now()
 		time.Sleep(conf.Delay * time.Second)
+		d1 := time.Now()
+		if util.Verbose() {
+			log.Printf("Delay finished, duration %v", d1.Sub(d0))
+		}
 	}
 }
 
@@ -148,7 +164,7 @@ func processFullZfsSend(conf *config.Config, sourceDataset string, snapshot1 str
 		return
 	}
 	for destinationSnapshot := range destinationSnapshots {
-		zfs.Destroy( destinationDataset + "@" + destinationSnapshot)
+		zfs.Destroy(destinationDataset + "@" + destinationSnapshot)
 	}
 
 	// destinationDataset := util.DestinationDataset(conf.Storage, sourceDataset)
