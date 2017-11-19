@@ -10,6 +10,12 @@ Installation
  - ``cd /opt``
  - ``git clone https://github.com/makhomed/autosync.git autosync```
 
+Upgrade
+-------
+
+ - ``cd /opt/autosync``
+ - ``git pull``
+
 Configuration
 -------------
 
@@ -26,15 +32,13 @@ Configuration
 
     destination tank/mirror
 
-    delay 60
-
 Configuration file allow comments, from symbol ``#`` to end of line.
 
 Configuration file has only five directives:
 ``source``, ``exclude``, ``include``, ``destination`` and ``delay``.
 
 Syntax of ``source`` directive: ``source <source-server>``.
-``<source-server>`` is hostname of source server or ip address.
+``<source-server>`` is hostname of source server or it ip address.
 
 Syntax of ``include`` and ``exclude`` directives are the same:
 ``exclude <pattern>`` or ``include <pattern>``.
@@ -50,15 +54,15 @@ if it was directive ``include`` - dataset will be included.
 
 ``destination`` directive define destination dataset name on current server.
 
-``delay`` defines delay in seconds between two sequential run of sync.
+``delay`` defines delay in seconds between two sequential run of sync. Default value is 600 seconds.
 
 
-ssh authorized_keys
--------------------
+Secure Shell Configuration
+--------------------------
 
 For work you need to generate private ssh key on destination server
 with comamnd ``ssh-keygen -t rsa`` and copy public key from ``/root/.ssh/id_rsa.pub``
-to ``/root/.ssh/authorized_keys`` on source server. Also you to check connection
+to ``/root/.ssh/authorized_keys`` on source servers. Also you to check connection
 with command ``ssh source.server.example.com`` and answer ``yes`` on question:
 
 .. code-block:: bash
@@ -70,8 +74,8 @@ with command ``ssh source.server.example.com`` and answer ``yes`` on question:
     Are you sure you want to continue connecting (yes/no)? yes
 
 
-autosnap service
-----------------
+Systemd Service Configuration
+-----------------------------
 
   - ``vim /etc/systemd/system/autosync@.service``
   - write to cron file something like this:
@@ -98,6 +102,9 @@ After this you need to start service:
 
 If all ok you will see what service is enabled and running.
 
-``autosnap`` will scan datasets on source server and automatically mirror
+``autosync`` will scan datasets on source server and automatically mirror
 all enabled by include/exclude rules datasets to destination dataset on local server.
+
+Safe time to stop service ``autosync`` - when it in idle state, i.e. when
+command ``systemctl status autosync@source-server`` show no child processes.
 
