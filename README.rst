@@ -24,7 +24,7 @@ Configuration
 
 .. code-block:: bash
 
-    source source.server.example.com
+    source source-server.example.com
 
     exclude tank
     exclude tank/backup**
@@ -57,28 +57,28 @@ if it was directive ``include`` - dataset will be included.
 ``delay`` defines delay in seconds between two sequential run of sync. Default value is 600 seconds.
 
 
-Secure Shell Configuration
---------------------------
+Secure Shell
+------------
 
 For work you need to generate private ssh key on destination server
 with comamnd ``ssh-keygen -t rsa`` and copy public key from ``/root/.ssh/id_rsa.pub``
-to ``/root/.ssh/authorized_keys`` on source servers. Also you to check connection
-with command ``ssh source.server.example.com`` and answer ``yes`` on question:
+to ``/root/.ssh/authorized_keys`` on source servers. Also you need to check connection
+with command ``ssh source-server.example.com`` and answer ``yes`` on ssh question:
 
 .. code-block:: bash
 
-    # ssh source.server.example.com
-    The authenticity of host 'source.server.example.com' can't be established.
+    # ssh source-server.example.com
+    The authenticity of host 'source-server.example.com' can't be established.
     ECDSA key fingerprint is SHA256:/cYI0bJzEX+CF3DhGEUQ+ZeGFmMzEJYAt3C15450zKs.
     ECDSA key fingerprint is MD5:44:20:bd:f5:aa:a7:52:ac:c5:19:e5:e0:28:2b:90:49.
     Are you sure you want to continue connecting (yes/no)? yes
 
 
-Systemd Service Configuration
------------------------------
+Systemd Service
+---------------
 
   - ``vim /etc/systemd/system/autosync@.service``
-  - write to cron file something like this:
+  - write to unit file something like this:
 
 .. code-block:: bash
 
