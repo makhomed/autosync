@@ -248,7 +248,7 @@ class SyncMan(object):
         command = template % (self.config.source, first_snapshot, second_snapshot, self.config.destination)
         process = Process("/bin/sh", "-c", command)
         if process.failed():
-            print "can't do ncremental zfs send / zfs receive"
+            print "can't do incremental zfs send / zfs receive"
             process.print_info("error")
         if process.stdout:
             print "stdout:", process.stdout
