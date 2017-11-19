@@ -14,14 +14,14 @@ import time
 __author__ = "Gena Makhomed"
 __contact__ = "https://github.com/makhomed/autosync"
 __license__ = "GPLv3"
-__version__ = "1.0.0"
-__date__ = "2017-11-18"
+__version__ = "1.0.1"
+__date__ = "2017-11-19"
 
 
 class Config(object):
 
     def __init__(self, configuration_file_name):
-        self.delay = 60
+        self.delay = 600
         self.source = None
         self.destination = None
         self.filters = list()
@@ -55,6 +55,8 @@ class Config(object):
             sys.exit("bad config, 'destination' directive must be defined")
         if self.destination[0] == "/" or "@" in self.destination:
             sys.exit("bad config, 'destination' must be ZFS filesystem name, '%s' given" % self.destination)
+        if self.delay < 60:
+            sys.exit("bad config, 'delay' must be > 60, '%d' given", self.delay)
 
     def transform_filter_line(self, filter_line):  # pylint: disable=no-self-use
         if filter_line.find(" ") > -1:
@@ -126,15 +128,9 @@ class SyncMan(object):
     def create_and_tune_destination_dataset(self):
         local_datasets = self.get_local_datasets()
         if self.config.destination not in local_datasets:
-            process = Process("/usr/sbin/zfs", "create", "-p", "-o", "primarycache=metadata", "-o", "secondarycache=none", self.config.destination)
+            process = Process("/usr/sbin/zfs", "create", "-p", self.config.destination)
             if process.failed():
                 print "can't create local ZFS dataset '%s'" % self.config.destination
-                process.print_info("fatal error")
-                sys.exit(1)
-        else:
-            process = Process("/usr/sbin/zfs", "set", "primarycache=metadata", "secondarycache=none", self.config.destination)
-            if process.failed():
-                print "can't set local ZFS properties on '%s'" % self.config.destination
                 process.print_info("fatal error")
                 sys.exit(1)
 
@@ -186,6 +182,23 @@ class SyncMan(object):
             if dataset_name == local_dataset:
                 local_snapshots.append(snapshot)
         return local_snapshots
+
+    def delete_local_snapshot(self, snapshot_name):  # pylint: disable=no-self-use
+        process = Process("/usr/sbin/zfs", "destroy", snapshot_name)
+        if process.failed():
+            print "can't delete ZFS snapshot '%s'" % snapshot_name
+            process.print_info("error")
+
+    def delete_unique_local_snapshots(self, remote_snapshots, local_snapshots):
+        remote_snapshots_set = set()
+        for remote_snapshot in remote_snapshots:
+            remote_snapshot_info = remote_snapshot["snapshot_info"]
+            remote_snapshots_set.add(remote_snapshot_info)
+        for local_snapshot in local_snapshots:
+            local_snapshot_info = local_snapshot["snapshot_info"]
+            if local_snapshot_info not in remote_snapshots_set:
+                local_snapshot_name = local_snapshot["snapshot_name"]
+                self.delete_local_snapshot(local_snapshot_name)
 
     def get_common_snapshots(self, remote_snapshots, local_snapshots):
         local_snapshots_set = set()
@@ -255,21 +268,29 @@ class SyncMan(object):
         if self.exit:
             sys.exit(0)
 
+    def delay(self):
+        counter = self.config.delay
+        while counter > 0 and not self.exit:
+            time.sleep(1)
+            counter -= 1
+
     def run(self):
         self.set_signal_handler()
         while not self.exit:
-            self.create_and_tune_destination_dataset()
             self.check_exit()
+            self.create_and_tune_destination_dataset()
             for remote_dataset in self.get_remote_datasets():
-                self.check_exit()
-                remote_snapshots = self.get_remote_snapshots(remote_dataset)
-                if not remote_snapshots:
-                    print "remote dataset '%s' has no snapshots, can't replicate it" % remote_dataset
-                    continue
                 self.check_exit()
                 local_dataset = self.get_local_dataset(remote_dataset)
                 self.check_exit()
                 local_snapshots = self.get_local_snapshots(local_dataset)
+                self.check_exit()
+                remote_snapshots = self.get_remote_snapshots(remote_dataset)
+                self.check_exit()
+                self.delete_unique_local_snapshots(remote_snapshots, local_snapshots)
+                if not remote_snapshots:
+                    print "remote dataset '%s' has no snapshots, can't replicate it" % remote_dataset
+                    continue
                 self.check_exit()
                 common_snapshots = self.get_common_snapshots(remote_snapshots, local_snapshots)
                 self.check_exit()
@@ -279,19 +300,19 @@ class SyncMan(object):
                 else:
                     self.check_exit()
                     self.do_full_zfs_send(remote_snapshots)
-            counter = self.config.delay
-            while counter > 0 and not self.exit:
-                time.sleep(1)
-                counter -= 1
+            self.delay()
 
 
-def configure_logging():
+def configure_logging(config):
+    basename = os.path.basename(config)
+    name, dummy_ext = os.path.splitext(basename)
+    instance_logfile = "/opt/autosync/log/%s.log" % name
     if not os.path.isdir("/opt/autosync/log"):
         os.mkdir("/opt/autosync/log")
     root_logger = logging.getLogger("")
     root_logger.setLevel(logging.DEBUG)
     log_formatter = logging.Formatter('%(asctime)s %(levelname)-7s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    log_handler = logging.handlers.RotatingFileHandler("/opt/autosync/log/autosync.log", maxBytes=10*1024*1024, backupCount=9)
+    log_handler = logging.handlers.RotatingFileHandler(instance_logfile, maxBytes=1*1024*1024, backupCount=9)
     log_handler.setFormatter(log_formatter)
     root_logger.addHandler(log_handler)
 
@@ -300,7 +321,7 @@ def main():
     parser = argparse.ArgumentParser(prog="autosync")
     parser.add_argument("-c", required=False, metavar="CONFIG", dest="config", default="/opt/autosync/autosync.conf", help="configuration file")
     args = parser.parse_args()
-    configure_logging()
+    configure_logging(args.config)
     config = Config(args.config)
     SyncMan(config).run()
 
