@@ -8,7 +8,7 @@ Installation
 ------------
 
  - ``cd /opt``
- - ``git clone https://github.com/makhomed/autosync.git autosync```
+ - ``git clone https://github.com/makhomed/autosync.git autosync``
 
 Upgrade
 -------
