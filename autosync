@@ -257,7 +257,7 @@ class SyncMan(object):
         logging.info("done incremental zfs send from %s / %s to %s" % (first_snapshot, second_snapshot, self.config.destination))
 
     def exit_gracefully(self, dummy_signum, dummy_frame):
-         self.exit = True
+        self.exit = True
 
     def set_signal_handler(self):
         self.exit = False
