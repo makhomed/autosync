@@ -22,7 +22,7 @@ Configuration
   - ``vim /opt/autosync/source-server.conf``
   - write to config something like this:
 
-.. code-block:: bash
+.. code-block:: none
 
     source source-server.example.com
 
@@ -65,7 +65,7 @@ with comamnd ``ssh-keygen -t rsa`` and copy public key from ``/root/.ssh/id_rsa.
 to ``/root/.ssh/authorized_keys`` on source servers. Also you need to check connection
 with command ``ssh source-server.example.com`` and answer ``yes`` on ssh question:
 
-.. code-block:: bash
+.. code-block:: none
 
     # ssh source-server.example.com
     The authenticity of host 'source-server.example.com' can't be established.
@@ -80,7 +80,7 @@ Systemd Service
   - ``vim /etc/systemd/system/autosync@.service``
   - write to unit file something like this:
 
-.. code-block:: bash
+.. code-block:: none
 
     [Unit]
     Description=autosync %I
