@@ -7,20 +7,20 @@ ZFS snapshot replication tool
 Installation
 ------------
 
- - ``cd /opt``
- - ``git clone https://github.com/makhomed/autosync.git autosync``
+- ``cd /opt``
+- ``git clone https://github.com/makhomed/autosync.git autosync``
 
 Upgrade
 -------
 
- - ``cd /opt/autosync``
- - ``git pull``
+- ``cd /opt/autosync``
+- ``git pull``
 
 Configuration
 -------------
 
-  - ``vim /opt/autosync/source-server.conf``
-  - write to config something like this:
+- ``vim /opt/autosync/source-server.conf``
+- write to config something like this:
 
 .. code-block:: none
 
@@ -77,8 +77,8 @@ with command ``ssh source-server.example.com`` and answer ``yes`` on ssh questio
 Systemd Service
 ---------------
 
-  - ``vim /etc/systemd/system/autosync@.service``
-  - write to unit file something like this:
+- ``vim /etc/systemd/system/autosync@.service``
+- write to unit file something like this:
 
 .. code-block:: none
 
@@ -95,10 +95,10 @@ Systemd Service
 
 After this you need to start service:
 
-  - ``systemctl daemon-reload``
-  - ``systemctl enable autosync@source-server``
-  - ``systemctl start autosync@source-server``
-  - ``systemctl status autosync@source-server``
+- ``systemctl daemon-reload``
+- ``systemctl enable autosync@source-server``
+- ``systemctl start autosync@source-server``
+- ``systemctl status autosync@source-server``
 
 If all ok you will see what service is enabled and running.
 
