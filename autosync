@@ -56,7 +56,7 @@ class Config(object):
         if self.destination[0] == "/" or "@" in self.destination:
             sys.exit("bad config, 'destination' must be ZFS filesystem name, '%s' given" % self.destination)
         if self.delay < 60:
-            sys.exit("bad config, 'delay' must be > 60, '%d' given", self.delay)
+            sys.exit("bad config, 'delay' must be >= 60, '%d' given", self.delay)
 
     def transform_filter_line(self, filter_line):  # pylint: disable=no-self-use
         if filter_line.find(" ") > -1:
