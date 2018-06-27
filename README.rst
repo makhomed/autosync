@@ -89,9 +89,14 @@ Systemd Service
     [Service]
     ExecStart=/opt/autosync/autosync -c /opt/autosync/%i.conf
     Restart=always
+    StartLimitInterval=0
 
     [Install]
     WantedBy=multi-user.target
+
+
+Note: in new versions of systemd StartLimitInterval renamed to StartLimitIntervalSec
+and moved from [Service] to [Unit] section. See details at https://selivan.github.io/2017/12/30/systemd-serice-always-restart.html
 
 After this you need to start service:
 
