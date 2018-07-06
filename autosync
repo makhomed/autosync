@@ -14,8 +14,8 @@ import time
 __author__ = "Gena Makhomed"
 __contact__ = "https://github.com/makhomed/autosync"
 __license__ = "GPLv3"
-__version__ = "1.0.1"
-__date__ = "2017-11-19"
+__version__ = "1.0.2"
+__date__ = "2018-07-06"
 
 
 class Config(object):
@@ -102,7 +102,7 @@ class SyncMan(object):
         self.config = config
 
     def get_local_datasets(self):
-        process = Process("/usr/sbin/zfs", "list", "-H", "-o", "name")
+        process = Process("/sbin/zfs", "list", "-H", "-o", "name")
         if process.failed():
             print "can't read local ZFS datasets"
             process.print_info("fatal error")
@@ -114,7 +114,7 @@ class SyncMan(object):
         return local_datasets
 
     def get_remote_datasets(self):
-        process = Process("/usr/bin/ssh", self.config.source, "/usr/sbin/zfs", "list", "-H", "-o", "name")
+        process = Process("/usr/bin/ssh", self.config.source, "/sbin/zfs", "list", "-H", "-o", "name")
         if process.failed():
             print "can't read remote ZFS datasets"
             process.print_info("fatal error")
@@ -128,14 +128,14 @@ class SyncMan(object):
     def create_and_tune_destination_dataset(self):
         local_datasets = self.get_local_datasets()
         if self.config.destination not in local_datasets:
-            process = Process("/usr/sbin/zfs", "create", "-p", self.config.destination)
+            process = Process("/sbin/zfs", "create", "-p", self.config.destination)
             if process.failed():
                 print "can't create local ZFS dataset '%s'" % self.config.destination
                 process.print_info("fatal error")
                 sys.exit(1)
 
     def get_remote_snapshots(self, remote_dataset):
-        process = Process("/usr/bin/ssh", self.config.source, "/usr/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap")
+        process = Process("/usr/bin/ssh", self.config.source, "/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap")
         if process.failed():
             print "can't read remote ZFS snapshots"
             process.print_info("fatal error")
@@ -163,7 +163,7 @@ class SyncMan(object):
         return os.path.join(self.config.destination, remote_dataset_part)
 
     def get_local_snapshots(self, local_dataset):
-        process = Process("/usr/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap")
+        process = Process("/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap")
         if process.failed():
             print "can't read local ZFS snapshots"
             process.print_info("fatal error")
@@ -184,7 +184,7 @@ class SyncMan(object):
         return local_snapshots
 
     def delete_local_snapshot(self, snapshot_name):  # pylint: disable=no-self-use
-        process = Process("/usr/sbin/zfs", "destroy", snapshot_name)
+        process = Process("/sbin/zfs", "destroy", snapshot_name)
         if process.failed():
             print "can't delete ZFS snapshot '%s'" % snapshot_name
             process.print_info("error")
@@ -220,7 +220,7 @@ class SyncMan(object):
         remote_snapshots.sort(sort_by_creation_date_oldest_first)
         source_snapshot = remote_snapshots[0]["snapshot_name"]
         logging.info("do   full zfs send from %s to %s" % (source_snapshot, self.config.destination))
-        template = "/usr/bin/ssh %s /usr/sbin/zfs send -c -e %s | /usr/sbin/zfs receive -F -d %s"
+        template = "/usr/bin/ssh %s /sbin/zfs send -c -e %s | /sbin/zfs receive -F -d %s"
         command = template % (self.config.source, source_snapshot, self.config.destination)
         process = Process("/bin/sh", "-c", command)
         if process.failed():
@@ -244,7 +244,7 @@ class SyncMan(object):
         if first_snapshot == second_snapshot:
             return
         logging.info("do   incremental zfs send from %s / %s to %s" % (first_snapshot, second_snapshot, self.config.destination))
-        template = "/usr/bin/ssh %s /usr/sbin/zfs send -c -e -I %s %s | /usr/sbin/zfs receive -F -d %s"
+        template = "/usr/bin/ssh %s /sbin/zfs send -c -e -I %s %s | /sbin/zfs receive -F -d %s"
         command = template % (self.config.source, first_snapshot, second_snapshot, self.config.destination)
         process = Process("/bin/sh", "-c", command)
         if process.failed():
