@@ -222,7 +222,7 @@ class SyncMan(object):
         logging.info("do   full zfs send from %s to %s" % (source_snapshot, self.config.destination))
         template = "/usr/bin/ssh %s /sbin/zfs send -c -e %s | /sbin/zfs receive -F -d %s"
         command = template % (self.config.source, source_snapshot, self.config.destination)
-        process = Process("/bin/sh", "-c", command)
+        process = Process("/bin/bash", "-c", command)
         if process.failed():
             print "can't do full zfs send / zfs receive"
             process.print_info("error")
@@ -246,7 +246,7 @@ class SyncMan(object):
         logging.info("do   incremental zfs send from %s / %s to %s" % (first_snapshot, second_snapshot, self.config.destination))
         template = "/usr/bin/ssh %s /sbin/zfs send -c -e -I %s %s | /sbin/zfs receive -F -d %s"
         command = template % (self.config.source, first_snapshot, second_snapshot, self.config.destination)
-        process = Process("/bin/sh", "-c", command)
+        process = Process("/bin/bash", "-c", command)
         if process.failed():
             print "can't do incremental zfs send / zfs receive"
             process.print_info("error")
