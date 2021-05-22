@@ -163,6 +163,15 @@ class SyncMan(object):
         return os.path.join(self.config.destination, remote_dataset_part)
 
     def get_local_snapshots(self, local_dataset):
+        process = Process("/sbin/zfs", "list", "-H", "-p", "-o", "name")
+        if process.failed():
+            print "can't read local ZFS datasets"
+            process.print_info("fatal error")
+            sys.exit(1)
+        lines = process.stdout.strip().split('\n')
+        if local_dataset not in lines:
+            return list()
+
         process = Process("/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap", local_dataset)
         if process.failed():
             print "can't read local ZFS snapshots"
