@@ -1,14 +1,23 @@
 ======================
-autosync (version 1.0)
+autosync (version 2.0)
 ======================
 
 ZFS snapshot replication tool
+
+``autosync`` will scan ZFS datasets on source server and automatically mirror
+all enabled by include/exclude rules datasets to destination dataset on local server.
 
 Installation
 ------------
 
 - ``cd /opt``
 - ``git clone https://github.com/makhomed/autosync.git autosync``
+
+Also you need to install python3:
+
+.. code-block:: none
+
+    # yum install python3
 
 Upgrade
 -------
@@ -27,18 +36,17 @@ Configuration
     source source-server.example.com
 
     exclude tank
-    exclude tank/backup**
-    exclude tank/vm
 
-    destination tank/mirror
+    destination tank/mirror/source-server.example.com
 
 Configuration file allow comments, from symbol ``#`` to end of line.
 
-Configuration file has only five directives:
-``source``, ``exclude``, ``include``, ``destination`` and ``delay``.
+Configuration file has only six directives:
+``source``, ``exclude``, ``include``, ``destination``, ``save`` and ``delay``.
 
-Syntax of ``source`` directive: ``source <source-server>``.
+Syntax of ``source`` directive: ``source <source-server>[:port]``.
 ``<source-server>`` is hostname of source server or it ip address.
+Port is optional.
 
 Syntax of ``include`` and ``exclude`` directives are the same:
 ``exclude <pattern>`` or ``include <pattern>``.
@@ -52,10 +60,51 @@ if it was directive ``include`` - dataset will be included.
 
 ``exclude`` and ``include`` define datasets for replication from source server.
 
-``destination`` directive define destination dataset name on current server.
+``destination`` directive define destination dataset name on the current server.
+
+Syntax of ``save`` directive: ``save <interval> <count>``. For example:
+
+.. code-block:: none
+
+    save hourly 24
+    save daily  30
+    save weekly  8
+
+``save`` directive can be global - for all datasets by default, or local, for specific dataset.
+For example:
+
+
+.. code-block:: none
+
+    source example.com
+
+    exclude tank
+
+    destination tank/mirror/example.com
+
+    save hourly 24
+    save daily  30
+    save weekly  8
+
+    [tank/mirror/example.com/kvm-stage-elastic]
+
+    save hourly 24
+    save daily  15
+    save weekly  8
+
+    [tank/mirror/example.com/kvm-stage-mysqld]
+
+    save hourly 24
+    save daily  15
+    save weekly  8
+
+By default, if no directive ``save`` exists for specific interval, 1:1 replica will be created,
+and all snapshots, not existent on source server, will be deleted on local server for destination datasets.
+
+Snapshots will be deleted only if they not exists on the source server, so ``save`` directive can't force
+delete replicated snapshots, if these snapshots exists on the source server.
 
 ``delay`` defines delay in seconds between two sequential run of sync. Default value is 600 seconds.
-
 
 Secure Shell
 ------------
@@ -107,9 +156,5 @@ After this you need to start service:
 
 If all ok you will see what service is enabled and running.
 
-``autosync`` will scan datasets on source server and automatically mirror
-all enabled by include/exclude rules datasets to destination dataset on local server.
-
-Safe time to stop service ``autosync`` - when it in idle state, i.e. when
-command ``systemctl status autosync@source-server`` show no child processes.
+Details about replication process you can seee in the log files in the log directory.
 
