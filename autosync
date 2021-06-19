@@ -1,4 +1,4 @@
-#!/usr/bin/python2 -u
+#!/usr/bin/python3 -u
 
 import argparse
 import logging
@@ -13,22 +13,45 @@ import time
 
 __author__ = "Gena Makhomed"
 __contact__ = "https://github.com/makhomed/autosync"
-__license__ = "GPLv3"
-__version__ = "1.1.0"
-__date__ = "2020-04-08"
+__license__ = "GNU General Public License version 3"
+__version__ = "2.0.0"
+
+
+class Process:
+    def __init__(self, *args):
+        self.args = args
+        process = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True, cwd='/')
+        self.stdout_bytes, self.stderr_bytes = process.communicate()
+        self.stdout = self.stdout_bytes.decode(encoding="utf-8", errors="replace").strip()
+        self.stderr = self.stderr_bytes.decode(encoding="utf-8", errors="replace").strip()
+        self.returncode = process.returncode
+
+    def failed(self):
+        return self.returncode != 0
+
+    def print_info(self, message):
+        print(message + ": Process(", self.args, ") failed")
+        print("returncode:", self.returncode)
+        print("stdout:", self.stdout)
+        print("stderr:", self.stderr)
 
 
 class Config(object):
 
     def __init__(self, configuration_file_name):
+        self.save = dict()
+        self.save['**'] = dict()
         self.delay = 600
-        self.source = None
+        self.source_host = None
+        self.source_port = 22
         self.destination = None
         self.filters = list()
         if not os.path.isfile(configuration_file_name):
             sys.exit("configuration file '%s' not found" % configuration_file_name)
         with open(configuration_file_name) as configuration_file:
             lines = configuration_file.read().strip().split('\n')
+        inside_dataset = False
+        dataset = None
         for line in lines:
             comment_start = line.find('#')
             if comment_start > -1:
@@ -37,26 +60,75 @@ class Config(object):
             if not line:
                 continue
             line = line.replace("\t", "\x20")
-            name, value = line.split(None, 1)
+            if line[0] == '[' and line[-1] == ']':
+                inside_dataset = True
+                dataset = line[1:-1].strip()
+                self.save[dataset] = dict()
+                if '*' in dataset or '?' in dataset or '\t' in dataset or '\x20' in dataset:
+                    sys.exit(f"bad config: bad dataset name '{dataset}'")
+                continue
+            try:
+                name, value = line.split(None, 1)
+            except ValueError:
+                sys.exit(f"bad config: bad line: {line}")
+
+            if name == "save":
+                save_name, count_string = value.split(None, 1)
+                if save_name.find(".") > -1:
+                    sys.exit("bad config: save '%s', symbol '.' not allowed" % save_name)
+                if not inside_dataset:
+                    if save_name in self.save['**']:
+                        sys.exit("bad config: save '%s' already defined" % save_name)
+                else:
+                    if save_name not in self.save['**']:
+                        sys.exit("bad config: save '%s' not defined at global level" % save_name)
+                    if save_name in self.save[dataset]:
+                        sys.exit("bad config: save '%s' already defined at dataset level" % save_name)
+                count = int(count_string)
+                if count <= 0:
+                    sys.exit("bad config: save '%s' count must be positive integer, '%d' given" % (save_name, count))
+                if not inside_dataset:
+                    self.save['**'][save_name] = count
+                else:
+                    self.save[dataset][save_name] = count
+
+            if inside_dataset:
+                if name == "source" or name == "destination" or name == "delay" or name == "exclude" or name == "include":
+                    sys.exit(f"bad config: directive '{name}' allowed only on global level")
+
             if name == "source":
-                self.source = value
+                if ':' in value:
+                    host, port = value.rsplit(':', 1)
+                    self.source_host = host
+                    self.source_port = int(port)
+                else:
+                    self.source_host = value
+
             elif name == "destination":
+                if value.startswith('/') or value.endswith('/') or '@' in value:
+                    sys.exit("bad config, 'destination' must be ZFS filesystem name, '%s' given" % value)
+
                 self.destination = value
             elif name == "delay":
                 self.delay = int(value)
             elif name == "include" or name == "exclude":
                 self.filters.append((name == "include", self.transform_filter_line(value)))
-            else:
+            elif name != "save":
                 sys.exit("invalid config directive '%s'" % name)
         self.filters.append((True, self.transform_filter_line("**")))
-        if self.source is None:
+        if self.source_host is None:
             sys.exit("bad config, 'source' directive must be defined")
         if self.destination is None:
             sys.exit("bad config, 'destination' directive must be defined")
-        if self.destination[0] == "/" or "@" in self.destination:
-            sys.exit("bad config, 'destination' must be ZFS filesystem name, '%s' given" % self.destination)
         if self.delay < 60:
             sys.exit("bad config, 'delay' must be >= 60, '%d' given", self.delay)
+
+        self.datasets = SyncMan.get_local_datasets(self.destination)
+        for dataset in self.save:
+            if dataset == '**':
+                continue
+            if dataset not in self.datasets:
+                print(f"WARNING!!! dataset '{dataset}' not exists")
 
     def transform_filter_line(self, filter_line):  # pylint: disable=no-self-use
         if filter_line.find(" ") > -1:
@@ -78,45 +150,28 @@ class Config(object):
         sys.exit("internal error: dataset '%s' don't match any filter line")
 
 
-class Process(object):
-
-    def __init__(self, *args):
-        self.args = args
-        process = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True, cwd='/')
-        self.stdout, self.stderr = process.communicate()
-        self.returncode = process.returncode
-
-    def failed(self):
-        return self.returncode != 0
-
-    def print_info(self, message):
-        print message + ": Process(", self.args, ") failed"
-        print "returncode:", self.returncode
-        print "stdout:", self.stdout
-        print "stderr:", self.stderr
-
-
 class SyncMan(object):
 
     def __init__(self, config):
         self.config = config
 
-    def get_local_datasets(self):
-        process = Process("/sbin/zfs", "list", "-H", "-o", "name")
+    @staticmethod
+    def get_local_datasets(config_destination):
+        process = Process("/usr/sbin/zfs", "list", "-H", "-o", "name")
         if process.failed():
-            print "can't read local ZFS datasets"
+            print("can't read local ZFS datasets")
             process.print_info("fatal error")
             sys.exit(1)
         local_datasets = list()
         for dataset in process.stdout.strip().split('\n'):
-            if dataset.startswith(self.config.destination):
+            if dataset.startswith(config_destination):
                 local_datasets.append(dataset)
         return local_datasets
 
     def get_remote_datasets(self):
-        process = Process("/usr/bin/ssh", self.config.source, "/sbin/zfs", "list", "-H", "-o", "name")
+        process = Process("/usr/bin/ssh", '-p', str(self.config.source_port), self.config.source_host, "/usr/sbin/zfs", "list", "-H", "-o", "name")
         if process.failed():
-            print "can't read remote ZFS datasets"
+            print("can't read remote ZFS datasets")
             process.print_info("fatal error")
             sys.exit(1)
         remote_datasets = list()
@@ -126,18 +181,18 @@ class SyncMan(object):
         return remote_datasets
 
     def create_and_tune_destination_dataset(self):
-        local_datasets = self.get_local_datasets()
+        local_datasets = self.get_local_datasets(self.config.destination)
         if self.config.destination not in local_datasets:
-            process = Process("/sbin/zfs", "create", "-p", self.config.destination)
+            process = Process("/usr/sbin/zfs", "create", "-p", self.config.destination)
             if process.failed():
-                print "can't create local ZFS dataset '%s'" % self.config.destination
+                print("can't create local ZFS dataset '%s'" % self.config.destination)
                 process.print_info("fatal error")
                 sys.exit(1)
 
     def get_remote_snapshots(self, remote_dataset):
-        process = Process("/usr/bin/ssh", self.config.source, "/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap", remote_dataset)
+        process = Process("/usr/bin/ssh", '-p', str(self.config.source_port), self.config.source_host, "/usr/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap", remote_dataset)
         if process.failed():
-            print "can't read remote ZFS snapshots"
+            print("can't read remote ZFS snapshots")
             process.print_info("fatal error")
             sys.exit(1)
         lines = process.stdout.strip().split('\n')
@@ -163,18 +218,18 @@ class SyncMan(object):
         return os.path.join(self.config.destination, remote_dataset_part)
 
     def get_local_snapshots(self, local_dataset):
-        process = Process("/sbin/zfs", "list", "-H", "-p", "-o", "name")
+        process = Process("/usr/sbin/zfs", "list", "-H", "-p", "-o", "name")
         if process.failed():
-            print "can't read local ZFS datasets"
+            print("can't read local ZFS datasets")
             process.print_info("fatal error")
             sys.exit(1)
         lines = process.stdout.strip().split('\n')
         if local_dataset not in lines:
             return list()
 
-        process = Process("/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap", local_dataset)
+        process = Process("/usr/sbin/zfs", "list", "-H", "-p", "-o", "name,creation", "-t", "snap", local_dataset)
         if process.failed():
-            print "can't read local ZFS snapshots"
+            print("can't read local ZFS snapshots")
             process.print_info("fatal error")
             sys.exit(1)
         lines = process.stdout.strip().split('\n')
@@ -193,21 +248,40 @@ class SyncMan(object):
         return local_snapshots
 
     def delete_local_snapshot(self, snapshot_name):  # pylint: disable=no-self-use
-        process = Process("/sbin/zfs", "destroy", snapshot_name)
+        process = Process("/usr/sbin/zfs", "destroy", snapshot_name)
         if process.failed():
-            print "can't delete ZFS snapshot '%s'" % snapshot_name
+            print("can't delete ZFS snapshot '%s'" % snapshot_name)
             process.print_info("error")
 
-    def delete_unique_local_snapshots(self, remote_snapshots, local_snapshots):
+    def get_stream_name(self, local_snapshot):
+        local_snapshot_info = local_snapshot["snapshot_info"]
+        for interval in self.config.save['**']:
+            if interval in local_snapshot_info:
+                return interval
+        return None
+
+    def delete_old_local_snapshots(self, remote_snapshots, local_snapshots):
         remote_snapshots_set = set()
         for remote_snapshot in remote_snapshots:
             remote_snapshot_info = remote_snapshot["snapshot_info"]
             remote_snapshots_set.add(remote_snapshot_info)
+        streams = dict()
+        for interval in self.config.save['**']:
+            streams[interval] = list()
+        streams[None] = list()
+        local_snapshots.sort(key=lambda x: x['creation_date'], reverse=True)
         for local_snapshot in local_snapshots:
-            local_snapshot_info = local_snapshot["snapshot_info"]
-            if local_snapshot_info not in remote_snapshots_set:
-                local_snapshot_name = local_snapshot["snapshot_name"]
-                self.delete_local_snapshot(local_snapshot_name)
+            streams[self.get_stream_name(local_snapshot)].append(local_snapshot)
+        for stream in streams:
+            for i, local_snapshot in enumerate(streams[stream]):
+                local_snapshot_info = local_snapshot["snapshot_info"]
+                local_dataset_name = local_snapshot["dataset_name"]
+                if local_snapshot_info in remote_snapshots_set:
+                    continue
+                save_count = self.config.save.get(local_dataset_name, self.config.save['**']).get(stream, self.config.save['**'].get(stream, None))
+                if save_count is None or i >= save_count:
+                    local_snapshot_name = local_snapshot["snapshot_name"]
+                    self.delete_local_snapshot(local_snapshot_name)
 
     def get_common_snapshots(self, remote_snapshots, local_snapshots):
         local_snapshots_set = set()
@@ -222,47 +296,39 @@ class SyncMan(object):
         return common_snapshots
 
     def do_full_zfs_send(self, remote_snapshots):
-
-        def sort_by_creation_date_oldest_first(item_x, item_y):
-            return cmp(item_x["creation_date"], item_y["creation_date"])
-
-        remote_snapshots.sort(sort_by_creation_date_oldest_first)
+        remote_snapshots.sort(key=lambda x: x['creation_date'], reverse=False)
         source_snapshot = remote_snapshots[0]["snapshot_name"]
         logging.info("do   full zfs send from %s to %s" % (source_snapshot, self.config.destination))
-        template = "/usr/bin/ssh %s /sbin/zfs send -c -e %s | /sbin/zfs receive -F -d %s"
-        command = template % (self.config.source, source_snapshot, self.config.destination)
+        template = "/usr/bin/ssh -p %s %s /usr/sbin/zfs send -p %s | /usr/sbin/zfs receive -F -d %s"
+        command = template % (str(self.config.source_port), self.config.source_host, source_snapshot, self.config.destination)
         process = Process("/bin/bash", "-c", command)
         if process.failed():
-            print "can't do full zfs send / zfs receive"
+            print("can't do full zfs send / zfs receive")
             process.print_info("error")
         if process.stdout:
-            print "stdout:", process.stdout
+            print("stdout:", process.stdout)
         if process.stderr:
-            print "stdout:", process.stderr
+            print("stdout:", process.stderr)
         logging.info("done full zfs send from %s to %s" % (source_snapshot, self.config.destination))
 
     def do_incremental_zfs_send(self, remote_snapshots, common_snapshots):
-
-        def sort_by_creation_date_newest_first(item_x, item_y):
-            return cmp(item_y["creation_date"], item_x["creation_date"])
-
-        common_snapshots.sort(sort_by_creation_date_newest_first)
-        remote_snapshots.sort(sort_by_creation_date_newest_first)
+        common_snapshots.sort(key=lambda x: x['creation_date'], reverse=True)
+        remote_snapshots.sort(key=lambda x: x['creation_date'], reverse=True)
         first_snapshot = common_snapshots[0]["snapshot_name"]
         second_snapshot = remote_snapshots[0]["snapshot_name"]
         if first_snapshot == second_snapshot:
             return
         logging.info("do   incremental zfs send from %s / %s to %s" % (first_snapshot, second_snapshot, self.config.destination))
-        template = "/usr/bin/ssh %s /sbin/zfs send -c -e -I %s %s | /sbin/zfs receive -F -d %s"
-        command = template % (self.config.source, first_snapshot, second_snapshot, self.config.destination)
+        template = "/usr/bin/ssh -p %s %s /usr/sbin/zfs send -p -I %s %s | /usr/sbin/zfs receive -F -d %s"
+        command = template % (str(self.config.source_port), self.config.source_host, first_snapshot, second_snapshot, self.config.destination)
         process = Process("/bin/bash", "-c", command)
         if process.failed():
-            print "can't do incremental zfs send / zfs receive"
+            print("can't do incremental zfs send / zfs receive")
             process.print_info("error")
         if process.stdout:
-            print "stdout:", process.stdout
+            print("stdout:", process.stdout)
         if process.stderr:
-            print "stdout:", process.stderr
+            print("stdout:", process.stderr)
         logging.info("done incremental zfs send from %s / %s to %s" % (first_snapshot, second_snapshot, self.config.destination))
 
     def exit_gracefully(self, dummy_signum, dummy_frame):
@@ -296,9 +362,9 @@ class SyncMan(object):
                 self.check_exit()
                 remote_snapshots = self.get_remote_snapshots(remote_dataset)
                 self.check_exit()
-                self.delete_unique_local_snapshots(remote_snapshots, local_snapshots)
+
                 if not remote_snapshots:
-                    print "remote dataset '%s' has no snapshots, can't replicate it" % remote_dataset
+                    print("remote dataset '%s' has no snapshots, can't replicate it" % remote_dataset)
                     continue
                 self.check_exit()
                 common_snapshots = self.get_common_snapshots(remote_snapshots, local_snapshots)
@@ -309,6 +375,13 @@ class SyncMan(object):
                 else:
                     self.check_exit()
                     self.do_full_zfs_send(remote_snapshots)
+
+                self.check_exit()
+                local_snapshots = self.get_local_snapshots(local_dataset)
+                self.check_exit()
+                remote_snapshots = self.get_remote_snapshots(remote_dataset)
+                self.check_exit()
+                self.delete_old_local_snapshots(remote_snapshots, local_snapshots)
             self.delay()
 
 
@@ -328,7 +401,8 @@ def configure_logging(config):
 
 def main():
     parser = argparse.ArgumentParser(prog="autosync")
-    parser.add_argument("-c", required=False, metavar="CONFIG", dest="config", default="/opt/autosync/autosync.conf", help="configuration file")
+    parser.add_argument("-v", "--version", action='version', version=f"%(prog)s {__version__}", help="show program's version and exit")
+    parser.add_argument("-c", required=True, metavar="CONFIG", dest="config", help="configuration file")
     args = parser.parse_args()
     configure_logging(args.config)
     config = Config(args.config)
