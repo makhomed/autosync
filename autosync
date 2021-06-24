@@ -362,7 +362,6 @@ class SyncMan(object):
                 self.check_exit()
                 remote_snapshots = self.get_remote_snapshots(remote_dataset)
                 self.check_exit()
-
                 if not remote_snapshots:
                     print("remote dataset '%s' has no snapshots, can't replicate it" % remote_dataset)
                     continue
@@ -376,8 +375,17 @@ class SyncMan(object):
                     self.check_exit()
                     self.do_full_zfs_send(remote_snapshots)
                     self.check_exit()
-                    self.do_incremental_zfs_send(remote_snapshots, common_snapshots)
-
+                    local_dataset = self.get_local_dataset(remote_dataset)
+                    self.check_exit()
+                    local_snapshots = self.get_local_snapshots(local_dataset)
+                    self.check_exit()
+                    remote_snapshots = self.get_remote_snapshots(remote_dataset)
+                    self.check_exit()
+                    common_snapshots = self.get_common_snapshots(remote_snapshots, local_snapshots)
+                    self.check_exit()
+                    if common_snapshots:
+                        self.check_exit()
+                        self.do_incremental_zfs_send(remote_snapshots, common_snapshots)
                 self.check_exit()
                 local_snapshots = self.get_local_snapshots(local_dataset)
                 self.check_exit()
