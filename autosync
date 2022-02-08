@@ -5,6 +5,7 @@ import logging
 import logging.handlers
 import os
 import os.path
+import random
 import re
 import signal
 import subprocess
@@ -283,8 +284,15 @@ class SyncMan(object):
             time.sleep(1)
             counter -= 1
 
+    def startup_delay(self):
+        counter = int(self.config.delay * random.random())
+        while counter > 0 and not self.exit:
+            time.sleep(1)
+            counter -= 1
+
     def run(self):
         self.set_signal_handler()
+        self.startup_delay()
         while not self.exit:
             self.check_exit()
             self.create_and_tune_destination_dataset()
