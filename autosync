@@ -15,7 +15,7 @@ import time
 __author__ = "Gena Makhomed"
 __contact__ = "https://github.com/makhomed/autosync"
 __license__ = "GNU General Public License version 3"
-__version__ = "2.0.0"
+__version__ = "2.1.1"
 
 
 class Process:
