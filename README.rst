@@ -1,6 +1,6 @@
-======================
-autosync (version 2.1)
-======================
+========================
+autosync (version 2.2.0)
+========================
 
 ZFS snapshot replication tool
 

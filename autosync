@@ -15,7 +15,7 @@ import time
 __author__ = "Gena Makhomed"
 __contact__ = "https://github.com/makhomed/autosync"
 __license__ = "GNU General Public License version 3"
-__version__ = "2.1.1"
+__version__ = "2.2.0"
 
 
 class Process:
@@ -313,8 +313,8 @@ class SyncMan(object):
         logging.info("done full zfs send from %s to %s" % (source_snapshot, self.config.destination))
 
     def do_incremental_zfs_send(self, remote_snapshots, common_snapshots):
-        common_snapshots.sort(key=lambda x: x['creation_date'], reverse=True)
-        remote_snapshots.sort(key=lambda x: x['creation_date'], reverse=True)
+        common_snapshots = list(reversed(common_snapshots))
+        remote_snapshots = list(reversed(remote_snapshots))
         first_snapshot = common_snapshots[0]["snapshot_name"]
         second_snapshot = remote_snapshots[0]["snapshot_name"]
         if first_snapshot == second_snapshot:
