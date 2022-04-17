@@ -358,7 +358,7 @@ class SyncMan(object):
 
     def run(self):
         self.set_signal_handler()
-        self.startup_delay()
+        #self.startup_delay()
         while not self.exit:
             self.check_exit()
             self.create_and_tune_destination_dataset()
