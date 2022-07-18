@@ -15,7 +15,7 @@ import time
 __author__ = "Gena Makhomed"
 __contact__ = "https://github.com/makhomed/autosync"
 __license__ = "GNU General Public License version 3"
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 
 class Process:
@@ -281,8 +281,8 @@ class SyncMan(object):
                 snapshot_exists_on_remote_side = local_snapshot_info in remote_snapshots_set
                 delete_snapshot = not snapshot_exists_on_remote_side
                 save_count = self.config.save.get(local_dataset_name, self.config.save['**']).get(stream, self.config.save['**'].get(stream, None))
-                if save_count is not None and i >= save_count:
-                    delete_snapshot = True
+                if save_count is not None:
+                    delete_snapshot = i >= save_count
                 if delete_snapshot:
                     local_snapshot_name = local_snapshot["snapshot_name"]
                     #print("DELETE EXTRA LOCAL SNAPSHOT %s" % local_snapshot_name )
