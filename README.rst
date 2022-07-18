@@ -1,5 +1,5 @@
 ========================
-autosync (version 2.2.0)
+autosync (version 2.3.0)
 ========================
 
 ZFS snapshot replication tool
@@ -100,9 +100,6 @@ For example:
 
 By default, if no directive ``save`` exists for specific interval, 1:1 replica will be created,
 and all snapshots, not existent on source server, will be deleted on local server for destination datasets.
-
-Snapshots will be deleted only if they not exists on the source server, so ``save`` directive can't force
-delete replicated snapshots, if these snapshots exists on the source server.
 
 ``delay`` defines delay in seconds between two sequential run of sync. Default value is 600 seconds.
 
