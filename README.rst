@@ -138,6 +138,7 @@ Systemd Service
     [Service]
     ExecStart=/opt/autosync/autosync -c /opt/autosync/%i.conf
     Restart=always
+    RestartSec=60s
     StartLimitInterval=0
 
     [Install]
