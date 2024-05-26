@@ -15,7 +15,7 @@ import time
 __author__ = "Gena Makhomed"
 __contact__ = "https://github.com/makhomed/autosync"
 __license__ = "GNU General Public License version 3"
-__version__ = "2.2.0"
+__version__ = "2.4.0"
 
 
 class Process:
@@ -249,6 +249,7 @@ class SyncMan(object):
         return local_snapshots
 
     def delete_local_snapshot(self, snapshot_name):  # pylint: disable=no-self-use
+        assert '@' in snapshot_name
         process = Process("/usr/sbin/zfs", "destroy", snapshot_name)
         if process.failed():
             print("can't delete ZFS snapshot '%s'" % snapshot_name)
@@ -261,7 +262,7 @@ class SyncMan(object):
                 return interval
         return None
 
-    def delete_old_local_snapshots(self, remote_snapshots, local_snapshots):
+    def delete_extra_local_snapshots(self, remote_snapshots, local_snapshots):
         remote_snapshots_set = set()
         for remote_snapshot in remote_snapshots:
             remote_snapshot_info = remote_snapshot["snapshot_info"]
@@ -277,11 +278,14 @@ class SyncMan(object):
             for i, local_snapshot in enumerate(streams[stream]):
                 local_snapshot_info = local_snapshot["snapshot_info"]
                 local_dataset_name = local_snapshot["dataset_name"]
-                if local_snapshot_info in remote_snapshots_set:
-                    continue
+                snapshot_exists_on_remote_side = local_snapshot_info in remote_snapshots_set
+                delete_snapshot = not snapshot_exists_on_remote_side
                 save_count = self.config.save.get(local_dataset_name, self.config.save['**']).get(stream, self.config.save['**'].get(stream, None))
-                if save_count is None or i >= save_count:
+                if save_count is not None:
+                    delete_snapshot = i >= save_count
+                if delete_snapshot:
                     local_snapshot_name = local_snapshot["snapshot_name"]
+                    #print("DELETE EXTRA LOCAL SNAPSHOT %s" % local_snapshot_name )
                     self.delete_local_snapshot(local_snapshot_name)
 
     def get_common_snapshots(self, remote_snapshots, local_snapshots):
@@ -350,15 +354,8 @@ class SyncMan(object):
             time.sleep(1)
             counter -= 1
 
-    def startup_delay(self):
-        counter = int(self.config.delay * random.random())
-        while counter > 0 and not self.exit:
-            time.sleep(1)
-            counter -= 1
-
     def run(self):
         self.set_signal_handler()
-        #self.startup_delay()
         while not self.exit:
             self.check_exit()
             self.create_and_tune_destination_dataset()
@@ -399,7 +396,7 @@ class SyncMan(object):
                 self.check_exit()
                 remote_snapshots = self.get_remote_snapshots(remote_dataset)
                 self.check_exit()
-                self.delete_old_local_snapshots(remote_snapshots, local_snapshots)
+                self.delete_extra_local_snapshots(remote_snapshots, local_snapshots)
             self.delay()
 
 
