@@ -1,0 +1,9 @@
+#!/bin/bash
+
+for i in $(ls -1 /opt/autosync/*.conf) ; do
+    conf=$(basename $i .conf)
+    echo
+    echo systemctl disable --now autosync@$conf
+         systemctl disable --now autosync@$conf
+done
+echo
