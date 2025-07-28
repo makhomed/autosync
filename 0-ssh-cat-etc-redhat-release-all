@@ -1,0 +1,7 @@
+#!/bin/bash
+
+for i in $(grep -h source /opt/autosync/*.conf | awk '{ print $2 }')
+do
+    printf "%-*s " 15 $i ; ssh $i cat /etc/redhat-release
+done
+
